@@ -27,14 +27,21 @@ using namespace std;
 Authenticator::Authenticator(const Config &config) {
     mysql_init(&con);
     Log::log_with_date_time("connecting to MySQL server " + config.mysql.server_addr + ':' + to_string(config.mysql.server_port), Log::INFO);
+    if (!config.mysql.ca.empty()) {
+        if (!config.mysql.key.empty() && !config.mysql.cert.empty()) {
+            mysql_ssl_set(&con, config.mysql.key.c_str(), config.mysql.cert.c_str(), config.mysql.ca.c_str(), nullptr, nullptr);
+        } else {
+            mysql_ssl_set(&con, nullptr, nullptr, config.mysql.ca.c_str(), nullptr, nullptr);
+        }
+    }
     if (mysql_real_connect(&con, config.mysql.server_addr.c_str(),
                                  config.mysql.username.c_str(),
                                  config.mysql.password.c_str(),
                                  config.mysql.database.c_str(),
-                                 config.mysql.server_port, NULL, 0) == NULL) {
+                                 config.mysql.server_port, nullptr, 0) == nullptr) {
         throw runtime_error(mysql_error(&con));
     }
-    bool reconnect = 1;
+    bool reconnect = true;
     mysql_options(&con, MYSQL_OPT_RECONNECT, &reconnect);
     Log::log_with_date_time("connected to MySQL server", Log::INFO);
 }
@@ -48,12 +55,12 @@ bool Authenticator::auth(const string &password) {
         return false;
     }
     MYSQL_RES *res = mysql_store_result(&con);
-    if (res == NULL) {
+    if (res == nullptr) {
         Log::log_with_date_time(mysql_error(&con), Log::ERROR);
         return false;
     }
     MYSQL_ROW row = mysql_fetch_row(res);
-    if (row == NULL) {
+    if (row == nullptr) {
         mysql_free_result(res);
         return false;
     }
@@ -70,7 +77,7 @@ bool Authenticator::auth(const string &password) {
     return true;
 }
 
-void Authenticator::record(const std::string &password, uint64_t download, uint64_t upload) {
+void Authenticator::record(const string &password, uint64_t download, uint64_t upload) {
     if (!is_valid_password(password)) {
         return;
     }
@@ -79,7 +86,7 @@ void Authenticator::record(const std::string &password, uint64_t download, uint6
     }
 }
 
-bool Authenticator::is_valid_password(const std::string &password) {
+bool Authenticator::is_valid_password(const string &password) {
     if (password.size() != PASSWORD_LENGTH) {
         return false;
     }
@@ -99,8 +106,8 @@ Authenticator::~Authenticator() {
 
 Authenticator::Authenticator(const Config&) {}
 bool Authenticator::auth(const string&) { return true; }
-void Authenticator::record(const std::string&, uint64_t, uint64_t) {}
-bool Authenticator::is_valid_password(const std::string&) { return true; }
+void Authenticator::record(const string&, uint64_t, uint64_t) {}
+bool Authenticator::is_valid_password(const string&) { return true; }
 Authenticator::~Authenticator() {}
 
 #endif // ENABLE_MYSQL
